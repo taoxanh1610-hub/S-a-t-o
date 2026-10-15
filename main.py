@@ -1,4 +1,3 @@
-
 import os
 import asyncio
 import sqlite3
@@ -15,9 +14,13 @@ from discord import app_commands
 
 TOKEN = os.getenv("DISCORD_TOKEN", "").strip()
 
-OWNER_ID = 1535146655999983698
+OWNER_ID = 1356498767788118099
 
 DB_FILE = "voice_lock.sqlite3"
+
+# ID phòng voice cần theo dõi và kênh gửi nhắc nhở
+ROOM_LOG_ID = 123456789012345678  # Thay bằng ID phòng voice
+LOG_CHANNEL_ID = 1544769375624765440  # Kênh chat nhận thông báo
 
 logging.basicConfig(
     level=logging.INFO,
@@ -91,6 +94,22 @@ intents.guilds = True
 intents.members = True
 intents.voice_states = True
 intents.message_content = True
+
+
+# ==================================================
+# EMBED NỘI QUY PHÒNG VOICE
+# ==================================================
+
+def make_rule_embed():
+    desc = (
+        "Hãy thể hiện mình tử tế .\\n"
+        "                   🕊️\\n"
+        "💙T.Th💙\\n"
+        "Ở đây có Táo 🍏.\\n\\n"
+        "                       - Giây phút -\\n\\n"
+        "- Ai rồi cũng sẽ phá vỡ Quy tắc vì đó  -"
+    )
+    return discord.Embed(description=desc, color=0x57F287)
 
 
 # ==================================================
@@ -265,7 +284,51 @@ class VoiceLockBot(commands.Bot):
         before,
         after,
     ):
-        # Chỉ theo dõi trạng thái voice của chính bot.
+        # Nhắc nhở thành viên khi vào phòng voice được chỉ định.
+        # Thành viên có quyền Administrator sẽ không bị nhắc nhở.
+        if not member.bot:
+            entered_target_room = (
+                after.channel is not None
+                and after.channel.id == ROOM_LOG_ID
+                and (
+                    before.channel is None
+                    or before.channel.id != after.channel.id
+                )
+            )
+
+            if entered_target_room and not member.guild_permissions.administrator:
+                channel = self.get_channel(LOG_CHANNEL_ID)
+
+                if channel is None:
+                    try:
+                        channel = await self.fetch_channel(LOG_CHANNEL_ID)
+                    except discord.HTTPException:
+                        logger.exception(
+                            "Không tìm thấy kênh gửi nhắc nhở: %s",
+                            LOG_CHANNEL_ID,
+                        )
+                        channel = None
+
+                if channel is not None:
+                    try:
+                        await channel.send(
+                            f"{member.mention} 🍏",
+                            allowed_mentions=discord.AllowedMentions(
+                                users=True,
+                                roles=False,
+                                everyone=False,
+                            ),
+                        )
+                        await channel.send(embed=make_rule_embed())
+                    except discord.Forbidden:
+                        logger.error(
+                            "Bot không có quyền gửi tin nhắn hoặc embed tại kênh %s.",
+                            LOG_CHANNEL_ID,
+                        )
+                    except discord.HTTPException:
+                        logger.exception("Không gửi được nội dung nhắc nhở.")
+
+        # Phần khóa voice cũ: chỉ xử lý khi chính bot bị chuyển phòng/ngắt kết nối.
         if self.user is None or member.id != self.user.id:
             return
 
@@ -276,7 +339,6 @@ class VoiceLockBot(commands.Bot):
 
         target_id = self.voice_targets[guild_id]
 
-        # Bot bị chuyển sang phòng khác hoặc bị ngắt kết nối.
         moved_away = (
             after.channel is None
             or after.channel.id != target_id
