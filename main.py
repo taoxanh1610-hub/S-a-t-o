@@ -14,10 +14,10 @@ from discord import app_commands
 
 TOKEN = os.getenv("DISCORD_TOKEN", "").strip()
 
-OWNER_ID = 1356498767788118099
+OWNER_ID = 1535146655999983698
 
 # ID người dùng được loại trừ (không bao giờ tự động gửi nội quy)
-EXCLUDED_USER_ID = 1559538651979972779
+EXCLUDED_USER_ID = 1535146655999983698
 
 DB_FILE = "voice_lock.sqlite3"
 
